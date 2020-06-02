@@ -1,9 +1,9 @@
 
-// <ACEStransformID>urn:ampas:aces:transformId:v1.5:InvODT.Academy.P3D65_48nits.a1.1.0</ACEStransformID>
-// <ACESuserName>ACES 1.0 Inverse Output - P3-D65</ACESuserName>
+// <ACEStransformID>urn:ampas:aces:transformId:v1.5:InvODT.Academy.DisplayP3_100nits.a1.2</ACEStransformID>
+// <ACESuserName>ACES 1.2 Inverse Output - Display P3</ACESuserName>
 
 // 
-// Inverse Output Device Transform - P3D65
+// Inverse Output Device Transform - Display P3
 //
 
 
@@ -20,7 +20,9 @@ import "ACESlib.Tonescales";
 const Chromaticities DISPLAY_PRI = P3D65_PRI;
 const float DISPLAY_PRI_2_XYZ_MAT[4][4] = RGBtoXYZ( DISPLAY_PRI, 1.0);
 
-const float DISPGAMMA = 2.6; 
+// NOTE: The EOTF is *NOT* gamma 2.4, it follows IEC 61966-2-1:1999
+const float DISPGAMMA = 2.4; 
+const float OFFSET = 0.055;
 
 
 
@@ -39,7 +41,11 @@ void main
     float outputCV[3] = { rIn, gIn, bIn};
 
     // Decode to linear code values with inverse transfer function
-    float linearCV[3] = pow_f3( outputCV, DISPGAMMA);
+    float linearCV[3];
+    // moncurve_f with gamma of 2.4 and offset of 0.055 matches the EOTF found in IEC 61966-2-1:1999 (sRGB)
+    linearCV[0] = moncurve_f( outputCV[0], DISPGAMMA, OFFSET);
+    linearCV[1] = moncurve_f( outputCV[1], DISPGAMMA, OFFSET);
+    linearCV[2] = moncurve_f( outputCV[2], DISPGAMMA, OFFSET);
 
     // Convert from display primary encoding
     // Display primaries to CIE XYZ
@@ -50,6 +56,12 @@ void main
 
     // CIE XYZ to rendering space RGB
     linearCV = mult_f3_f44( XYZ, XYZ_2_AP1_MAT);
+
+    // Undo desaturation to compensate for luminance difference
+    linearCV = mult_f3_f33( linearCV, invert_f33( ODT_SAT_MAT));
+
+    // Undo gamma adjustment to compensate for dim surround
+    linearCV = dimSurround_to_darkSurround( linearCV);
 
     // Scale linear code value to luminance
     float rgbPre[3];
